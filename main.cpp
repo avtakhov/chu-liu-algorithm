@@ -18,7 +18,6 @@ struct edge
     {}
 
     edge() = default;
-
 };
 
 bool operator<(edge const& a, edge const& b)
@@ -31,21 +30,78 @@ bool operator<(edge const& a, edge const& b)
         return a.to < b.to;
 }
 
-using union_set = std::pair<std::set<edge>, long long>;
 
-void unite_us(union_set& f, union_set& s)
+struct Node
 {
-
-    for (auto i : s.first)
+    explicit Node(edge data)
+        : data_(data)
+        , add(0)
     {
-        f.first.emplace(i.from, i.to, i.dist + s.second - f.second);
+        left = right = nullptr;
     }
-    s.first.clear();
+
+    edge data()
+    {
+        push();
+        return data_;
+    }
+
+    void add_all(long long value)
+    {
+        add += value;
+    }
+
+private:
+    edge data_;
+    Node* left;
+    Node* right;
+    long long add;
+
+    friend Node* merge(Node*, Node*);
+    friend edge extract_min(Node*&);
+
+    void push()
+    {
+        data_.dist += add;
+        if (left)
+            left->add += add;
+        if (right)
+            right->add += add;
+        add = 0;
+    }
+
+};
+
+Node* merge(Node* a, Node* b)
+{
+    if (a == nullptr)
+        return b;
+    if (b == nullptr)
+        return a;
+
+    a->push();
+    b->push();
+
+    if (b->data_ < a->data_)
+    {
+        std::swap(a, b);
+    }
+    // a >= b
+    a->left = merge(a->left, b);
+    std::swap(a->left, a->right);
+    return a;
+}
+
+edge extract_min(Node*& t)
+{
+    edge ans = t->data();
+    t = merge(t->left, t->right);
+    return ans;
 }
 
 struct dsu
 {
-    explicit dsu(std::vector<union_set> data)
+    explicit dsu(std::vector<Node*> data)
         : p(data.size())
         , size(data.size(), 1)
         , data(std::move(data))
@@ -56,7 +112,7 @@ struct dsu
         }
     }
 
-    union_set& component(int index)
+    Node*& component(int index)
     {
         return data[get(index)];
     }
@@ -81,41 +137,23 @@ struct dsu
             return false;
         p[b] = a;
         size[a] += size[b];
-        unite_us(data[a], data[b]);
+        data[a] = merge(data[a], data[b]);
         return true;
     }
 
 private:
     mutable std::vector<int> p;
     std::vector<size_t> size;
-    std::vector<union_set> data;
+    std::vector<Node*> data;
 
 };
 
-void add(union_set& t, long long val)
-{
-    t.second += val;
-}
-
-edge min(union_set const& t)
-{
-    auto ans = *t.first.begin();
-    ans.dist += t.second;
-    return ans;
-}
-
-edge extract_min(union_set& t)
-{
-    auto ans = min(t);
-    t.first.erase(t.first.begin());
-    return ans;
-}
 
 inline void solve(std::istream& is, std::ostream& os)
 {
     int n, m;
     is >> n >> m;
-    std::vector<union_set> data(n, {{}, 0});
+    std::vector<Node*> data(n, nullptr);
     std::vector<std::list<int>> g(n);
     for (int i = 0; i < m; ++i)
     {
@@ -123,7 +161,7 @@ inline void solve(std::istream& is, std::ostream& os)
         long long cost;
         is >> from >> to >> cost;
         from--, to--;
-        data[to].first.emplace(from, to, cost);
+        data[to] = merge(new Node(edge(from, to, cost)), data[to]);
         g[from].push_back(to);
     }
 
@@ -162,7 +200,8 @@ inline void solve(std::istream& is, std::ostream& os)
         }
         while (note.get(e.from) == note.get(e.to));
 
-        add(note.component(x), -e.dist);
+        if (note.component(x) != nullptr)
+            note.component(x)->add_all(-e.dist);
         st.push_back(e);
 
         if (!visited[e.from])
@@ -215,3 +254,4 @@ signed main()
     solve(std::cin, std::cout);
     return 0;
 }
+
